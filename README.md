@@ -44,8 +44,8 @@ make create_env
 Edit the `.env` file to set the following variables:
 
 ```env
-USER_NAME=myuser
-USER_PASSWORD=mysecurepassword
+USER_NAME=your_user
+USER_PASSWORD=yoursecurepassword
 ACCESS_SSH_PUBLIC_KEY_PATH=/path/to/your/ssh_public_key.pub
 ```
 
@@ -62,19 +62,19 @@ your_server_ip ansible_ssh_user=your_user ansible_ssh_pass=your_password
 
 This repository includes a Makefile for easy command execution:
 
-# Copies the example .env file for configuration.
+#### Copies the example .env file for configuration.
 
 ```bash
 make create_env
 ```
 
-# Pings the server to verify connectivity.
+#### Pings the server to verify connectivity.
 
 ```bash
 make test
 ```
 
-# Executes the Ansible playbook to set up the VPS with the configuration defined in the playbook.
+#### Executes the Ansible playbook to set up the VPS with the configuration defined in the playbook.
 
 ```bash
 make run
