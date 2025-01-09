@@ -97,6 +97,8 @@ Run the setup with:
 make run
 ```
 
+Or directly with full command:
+
 ```bash
 
 set -a && . ./.env && set +a && ansible-playbook -i hosts.ini setup.yml --ssh-common-args='-o PubkeyAuthentication=no -o PreferredAuthentications=password'
