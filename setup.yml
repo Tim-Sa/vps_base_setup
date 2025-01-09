@@ -1,0 +1,141 @@
+---
+- hosts: vps
+  vars:
+    ansible_host_key_checking: false
+  become: yes
+  tasks:
+    - name: Ensure mkpasswd is installed
+      apt:
+        name: whois
+        state: present
+
+    - name: Generate encrypted password
+      shell: mkpasswd --method=SHA-512 "{{ lookup('env', 'USER_PASSWORD') }}"
+      register: encrypted_user_password
+
+    - name: Create a new user
+      user:
+        name: "{{ lookup('env', 'USER_NAME') }}"
+        state: present
+        shell: /bin/bash
+        create_home: yes
+        password: "{{ encrypted_user_password.stdout }}"
+
+    - name: Ensure user can run sudo without a password
+      lineinfile:
+        path: /etc/sudoers
+        line: "{{ lookup('env', 'USER_NAME') }} ALL=(ALL) NOPASSWD: ALL"
+        validate: "visudo -cf %s"
+
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install required packages for Docker
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: latest
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+        
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
+        state: present
+
+    - name: Update apt packages after adding Docker repository
+      apt:
+        update_cache: yes
+
+    - name: Install Docker CE
+      apt:
+        name: docker-ce
+        state: latest
+
+    - name: Add user to Docker group
+      user:
+        name: "{{ lookup('env', 'USER_NAME') }}"
+        groups: docker
+        append: yes
+
+    - name: Ensure .ssh directory exists for the new user
+      file:
+        path: /home/{{ lookup('env', 'USER_NAME') }}/.ssh
+        state: directory
+        owner: "{{ lookup('env', 'USER_NAME') }}"
+        group: "{{ lookup('env', 'USER_NAME') }}"
+        mode: '0700'
+
+    - name: Copy public key to the target user's authorized_keys
+      copy:
+        src: "{{ lookup('env', 'ACCESS_SSH_PUBLIC_KEY_PATH') }}"
+        dest: /home/{{ lookup('env', 'USER_NAME') }}/.ssh/authorized_keys
+        owner: "{{ lookup('env', 'USER_NAME') }}"
+        group: "{{ lookup('env', 'USER_NAME') }}"
+        mode: '0600'
+
+    - name: Ensure UFW is installed
+      package:
+        name: ufw
+        state: present
+
+    - name: Ensure UFW is enabled
+      community.general.ufw:
+        state: enabled
+        rule: allow
+        name: 'OpenSSH'
+
+    - name: Ensure Nginx is installed
+      apt:
+        name: nginx
+        state: present
+
+    - name: Check available UFW application profiles
+      command: ufw app list
+      register: ufw_app_list
+
+    - name: Allow HTTP and HTTPS traffic if profiles exist
+      community.general.ufw:
+        rule: allow
+        name: "{{ item }}"
+      loop:
+        - 'Nginx HTTP'
+        - 'Nginx HTTPS'
+      when: "'Nginx HTTP' in ufw_app_list.stdout or 'Nginx HTTPS' in ufw_app_list.stdout"
+
+    - name: Configure SSH for PubkeyAuthentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PubkeyAuthentication'
+        line: 'PubkeyAuthentication yes'
+        state: present
+
+    - name: Set maximum authentication attempts for SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^MaxAuthTries'
+        line: 'MaxAuthTries 20'
+        state: present
+
+    - name: Disable root login and password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '{{ item.regexp }}'
+        line: '{{ item.line }}'
+        state: present
+      loop:
+        - { regexp: '^PermitRootLogin', line: 'PermitRootLogin no' }
+        - { regexp: '^PasswordAuthentication', line: 'PasswordAuthentication no' }
+
+    - name: Restart SSH service
+      service:
+        name: ssh
+        state: restarted

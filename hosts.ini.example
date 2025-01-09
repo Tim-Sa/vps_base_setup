@@ -1,0 +1,2 @@
+[vps]
+your_server_ip ansible_ssh_user=your_user ansible_ssh_pass=your_password
